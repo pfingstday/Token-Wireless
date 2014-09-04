@@ -1,12 +1,13 @@
-#include <SoftwareSerial.h>
-SoftwareSerial BT = SoftwareSerial(3,2);
+//#include <Arduino.h>
+#include <SendOnlySoftwareSerial.h>
+SendOnlySoftwareSerial BT (2);
 
 #include <Adafruit_NeoPixel.h>
 #define PIN 13
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(24, PIN, NEO_GRB + NEO_KHZ800);
 
-//Include Metro Lib
-#include <Metro.h> 
+//Include Timer Lib
+#include <Timer.h>
 
 // Swipe Detector Lib
 #include "SwipeDetector.h"
@@ -17,310 +18,245 @@ SharpIRProximitySensor sensorLeft(2);
 SharpIRProximitySensor sensorRight(3);
 SwipeDetector detector;
 
-// Delay Setup
-boolean delayOn = true;
-Metro delaySensor = Metro(1000);
+Timer disableSwipeTimer(100);
 
-boolean resetColor = true;
-Metro delayColor = Metro(2000);
-
-boolean MusicOff = false;
-boolean MuteOn = false;
-
-boolean CursorModus = false;
-
-
+void consumerCommand(uint8_t mask0,uint8_t mask1);
+void colorWipe(uint32_t c, uint8_t wait);
+void reverseColorWipe(uint32_t c, uint8_t wait);
+void theaterChase(uint32_t c, uint8_t wait);
 
 void setup(){
-  
-  strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
 
-  Serial.begin(9600);
-  BT.begin(9600); 
+    strip.begin();
+    strip.show(); // Initialize all pixels to 'off'
+
+    Serial.begin(9600);
+    BT.begin(9600);
 }
 
 
 
-void loop(){
-  
-  
-  /* Sharp IR */
+void detectSwipe(int distance2, int distance)
+{
+    SwipeDetector::Swipe s = detector.detect(distance, distance2);
 
-  int distance = sensorLeft.read();
+    if (s == SwipeDetector::SWIPE_RIGHT) {
+        //Serial.println("Swipe: Next");
 
-  int distance2 = sensorRight.read();
-
-  SwipeDetector::Swipe s = detector.detect(distance, distance2);
-  
-  if (distance != -1 && distance2 != -1) {
-    //Serial.println(distance);
-    //Serial.println(distance2);
-  }
-
-
- /* Sensor Delay */  
-   
-   if (delaySensor.check() == 1) {
-     
-   if (delayOn == true && distance != -1 && distance < 28 && distance2 < 28){
-    delayOn = false;
-     //Serial.println("delayOn = false");
-    }else{
-     delayOn = true;
-     //Serial.println("delayOn = true");
-    }
- }
-   
-      
-    // Track Control
-
-if (CursorModus == false && delayOn == true) {
-
-   if (s == SwipeDetector::SWIPE_RIGHT) {
-   //Serial.println("Swipe: Next");        
-
-
-//        // PlayPause
-//        consumerCommand(0x40,0x00);
-//        consumerCommand(0x00,0x00);
-//        Serial.println("Play/Pause");
-//        
         // Next Track
         consumerCommand(0x80,0x00);
         consumerCommand(0x00,0x00);
         Serial.println("Next Track");
-//
-//        // Scan Prevoius Track
-//        consumerCommand(0x00,0x05);
-//        consumerCommand(0x00,0x00);
-//        Serial.println("Scan Prevoius Track");
+
 
         colorWipe(strip.Color(25, 50, 0), 20); // Green
         colorWipe(strip.Color(0, 0, 0), 20); // Green
-        
-        delaySensor.reset();
-        delay(30);
-      }
-      
-      
-    if (s == SwipeDetector::SWIPE_LEFT) {
-    //Serial.println("Swipe: Previous");
-        
+    }
 
-//        // PlayPause
-//        consumerCommand(0x40,0x00);
-//        consumerCommand(0x00,0x00);
-//        Serial.println("Play/Pause");
-//        
-//        // Next Track
-//        consumerCommand(0x80,0x00);
-//        consumerCommand(0x00,0x00);
-//        Serial.println("Next Track");
-//
+
+    if (s == SwipeDetector::SWIPE_LEFT) {
+        //Serial.println("Swipe: Previous");
         // Scan Prevoius Track
         consumerCommand(0x00,0x05);
         consumerCommand(0x00,0x00);
         Serial.println("Previous Track");
-        
+
         reverseColorWipe(strip.Color(50, 0, 1), 20); // Red
         reverseColorWipe(strip.Color(0, 0, 0), 20); // Red
-        
-        delaySensor.reset();
-        delay(30);
-      }
-   }   
-      
-      
-      
-    // Volume Control   
-     
-    if (CursorModus == false && delayOn == false) {   
-       
-     if (distance2 != -1 && distance2 >= 9 && distance2 <= 20) {
-        
+    }
+}
+
+const int MAX = 30;
+const int MIN = 4;
+
+void detectHover(int start, int dist)
+{
+    int diff = start-dist;
+
+    //Serial.println(dist);
+
+    if (diff < -1) {
+
         // Volume Up
         consumerCommand(0x10,0x00);
         consumerCommand(0x00,0x00);
-        Serial.println("Volume Up");
-        
-        //Serial.println("Up Arrow");
-        //BT.write(14);
-        
-  theaterChase(strip.Color(25, 50, 0), 0);
-  theaterChase(strip.Color(0, 0, 0), 0);
-        
+        //Serial.println("Volume Up");
+
+        theaterChase(strip.Color(25, 50, 10), 2);
+        theaterChase(strip.Color(0, 0, 0), 0);
+
+        sensorLeft.clear();
         sensorRight.clear();
-        delaySensor.reset();
-        delay(200);
+    }
 
-        MusicOff = false;
-      }
+    if (diff > 1) {
 
-      if (distance2 != -1 && distance2 >= 4 && distance2 <= 7) {
-        
         // Volume Down
         consumerCommand(0x20,0x00);
         consumerCommand(0x00,0x00);
-        Serial.println("Volume Down");
-        
-//        Serial.println("Down Arrow");
-//        BT.write(12);
-        
-  theaterChase(strip.Color(50, 0, 1), 0);
-  theaterChase(strip.Color(0, 0, 0), 0);
+        //Serial.println("Volume Down");
 
+        theaterChase(strip.Color(40, 10, 5), 1);
+        theaterChase(strip.Color(0, 0, 0), 0);
+
+        sensorLeft.clear();
         sensorRight.clear();
-        delaySensor.reset();         
-        delay(200);
-        
-        MusicOff = false;
-      }  
     }
-    
-    
-      // Cursor Modus  
-      
+}
 
-if (CursorModus == true && delayOn == true) {
+void detectHover1(int start, int dist)
+{
+    int diff = start-dist;
 
-   if (s == SwipeDetector::SWIPE_RIGHT) {
-   Serial.println("Swipe: Next");        
+    //Serial.println(dist);
 
-      
-   BT.write(6);
-   Serial.println("Right Arrow");
+    if (diff < -1) {
 
+        // Volume Up
+        consumerCommand(0x10,0x00);
+        consumerCommand(0x00,0x00);
+        //Serial.println("Volume Up");
 
-        colorWipe(strip.Color(25, 50, 0), 10); // Green
-        colorWipe(strip.Color(0, 0, 0), 10); // Green
-        
-        delaySensor.reset();
-        delay(1);
-      }
-      
-      
-    if (s == SwipeDetector::SWIPE_LEFT) {
-    Serial.println("Swipe: Previous");
-        
+        //theaterChase(strip.Color(25, 50, 0), 20);
+        //theaterChase(strip.Color(0, 0, 100), 20);
 
-    Serial.println("Left Arrow");
-    BT.write(10);
-
-        
-        reverseColorWipe(strip.Color(50, 0, 1), 10); // Red
-        reverseColorWipe(strip.Color(0, 0, 0), 10); // Red
-        
-        delaySensor.reset();
-        delay(1);
-      }
-   }    
-     
-    if (CursorModus == true && delayOn == false) {   
-       
-     if (distance2 != -1 && distance2 >= 9 && distance2 <= 20) {
-        
-        BT.write(14);
-        Serial.println("Up Arrow");
-
-        
-  theaterChase(strip.Color(25, 50, 0), 1);
-  theaterChase(strip.Color(0, 0, 0), 1);
-        
+        sensorLeft.clear();
         sensorRight.clear();
-        delaySensor.reset();
-        delay(10);
 
-        MusicOff = false;
-      }
-
-      if (distance2 != -1 && distance2 >= 4 && distance2 <= 7) {
-        
-        BT.write(12);
-        Serial.println("Down Arrow");
-        
-  theaterChase(strip.Color(50, 0, 1), 1);
-  theaterChase(strip.Color(0, 0, 0), 1);
-
-        sensorRight.clear();
-        delaySensor.reset();         
-        delay(10);
-        
-        MusicOff = false;
-      }  
+        int range = MAX-start;
+        float f = 1.0f+(float)diff/range;
+        int d = f*250;
+        if(d<0)
+            d=1;
+        Serial.println(d);
+        delay(d);
     }
-    
-//       // Mute & Play     
-//   
-//    if (distance2 != -1 && distance2 <= 3 && delayOn == false) {
-//
-//      
-//      // PlayPause
-//      consumerCommand(0x40,0x00);
-//      consumerCommand(0x00,0x00);
-//      Serial.println("Play/Pause");
-//        
-//      sensorRight.clear();
-//
-//      MusicOff = true;
-//      MuteOn = true;
-//      
-//      delay(300);
-//      delaySensor.reset();
-//        
-//    }
-//
-//    if (MuteOn == true && delayOn == true) {
-//      
-//      if (s == SwipeDetector::SWIPE_LEFT || s == SwipeDetector::SWIPE_RIGHT) {
-//        
-//        // PlayPause
-//        consumerCommand(0x40,0x00);
-//        consumerCommand(0x00,0x00);
-//        Serial.println("Play/Pause");
-//        
-//        sensorRight.clear();
-//
-//        MusicOff = false;
-//        MuteOn = false;
-//      }
-//    }
-  
-  
-      
-  }
-  
-  
+
+    if (diff > 2) {
+
+        // Volume Down
+        consumerCommand(0x20,0x00);
+        consumerCommand(0x00,0x00);
+        //Serial.println("Volume Down");
+
+        //theaterChase(strip.Color(50, 0, 1), 20);
+        //theaterChase(strip.Color(0, 0, 100), 20);
+
+        int range = start-MIN;
+        float f = 1.0f-(float)diff/range;
+
+        int d = f*250;
+        if(d<0)
+            d=1;
+        Serial.println(d);
+        delay(d);
+
+        sensorLeft.clear();
+        sensorRight.clear();
+    }
+}
+
+int last;
+
+void detectHover2(int start, int dist)
+{
+    int diff = last-dist;
+
+    if(diff != 0)
+    Serial.println(diff);
+
+    if (diff < -2) {
+
+        // Volume Up
+        consumerCommand(0x10,0x00);
+        consumerCommand(0x00,0x00);
+        //Serial.println("Volume Up");
+
+        theaterChase(strip.Color(25, 50, 0), 0);
+        theaterChase(strip.Color(0, 0, 0), 0);
+
+        sensorLeft.clear();
+        sensorRight.clear();
+    }
+
+    if (diff > 2) {
+
+        // Volume Down
+        consumerCommand(0x20,0x00);
+        consumerCommand(0x00,0x00);
+        //Serial.println("Volume Down");
+
+        theaterChase(strip.Color(50, 0, 1), 0);
+        theaterChase(strip.Color(0, 0, 0), 0);
+    }
+
+    delay(100);
+
+    last = dist;
+}
+
+int hoverStart;
+
+void loop()
+{
+    int distance = sensorLeft.read();
+    int distance2 = sensorRight.read();
+    int avgDist = (distance + distance2) / 2;
+
+    if (distance != -1 && distance2 != -1) {
+        //Serial.println(distance);
+        //Serial.println(distance2);
+    } else {
+        disableSwipeTimer.reset();
+    }
+
+    if(disableSwipeTimer.singleShot()) {
+        hoverStart = avgDist;
+        last = hoverStart;
+        Serial.print("Hover Start: ");
+        Serial.println(hoverStart);
+    }
+
+    if(disableSwipeTimer.check()) {
+        detectHover(hoverStart, avgDist);
+        detector.reset();
+    } else {
+        detectSwipe(distance2, distance);
+
+    }
+}
+
+
 void consumerCommand(uint8_t mask0,uint8_t mask1) {
-  BT.write(0xFD);
-  BT.write((byte)0x00);
-  BT.write((byte)0x02);
-  BT.write(mask0);
-  BT.write(mask1);
-  BT.write((byte)0x00);
-  BT.write((byte)0x00);
-  BT.write((byte)0x00);
-  BT.write((byte)0x00);
+    BT.write(0xFD);
+    BT.write((byte)0x00);
+    BT.write((byte)0x02);
+    BT.write(mask0);
+    BT.write(mask1);
+    BT.write((byte)0x00);
+    BT.write((byte)0x00);
+    BT.write((byte)0x00);
+    BT.write((byte)0x00);
 
 }
-  
+
 
 void colorWipe(uint32_t c, uint8_t wait) {
-  for(uint16_t i=0; i<strip.numPixels(); i++) {
-  strip.setPixelColor(i, c);
-  strip.show();
-delay(wait);
-}
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, c);
+        strip.show();
+        delay(wait);
+    }
 }
 
 void reverseColorWipe(uint32_t c, uint8_t wait)
 {
-for(int16_t i=(strip.numPixels()-1); i>=0; i--)
-{
-strip.setPixelColor(i, c);
-strip.show();
-delay(wait);
-}
+    for(int16_t i=(strip.numPixels()-1); i>=0; i--)
+    {
+        strip.setPixelColor(i, c);
+        strip.show();
+        delay(wait);
+    }
 }
 
 //void colorFade(uint8_t wait) {
@@ -333,19 +269,19 @@ delay(wait);
 
 
 void theaterChase(uint32_t c, uint8_t wait) {
-  for (int j=0; j<10; j++) {  //do 10 cycles of chasing
-    for (int q=0; q < 3; q++) {
-      for (int i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, c);    //turn every third pixel on
-      }
-      strip.show();
-     
-      delay(wait);
-     
-      for (int i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, 0);        //turn every third pixel off
-      }
+    for (int j=0; j<10; j++) {  //do 10 cycles of chasing
+        for (int q=0; q < 3; q++) {
+            for (int i=0; i < strip.numPixels(); i=i+3) {
+                strip.setPixelColor(i+q, c);    //turn every third pixel on
+            }
+            strip.show();
+
+            delay(wait);
+
+            for (int i=0; i < strip.numPixels(); i=i+3) {
+                strip.setPixelColor(i+q, 0);        //turn every third pixel off
+            }
+        }
     }
-  }
 }
 
