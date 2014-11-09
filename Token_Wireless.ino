@@ -1,300 +1,258 @@
-//#include <Arduino.h>
-#include <SendOnlySoftwareSerial.h>
-SendOnlySoftwareSerial BT (2);
+#include <Arduino.h>
+#include <SoftwareSerial.h>
+#include "Token_SwipeDetector.h"
+#include "Token_ProximitySensor.h"
+#include "Token_Timer.h"
+#include "Token_NeoPixel.h"
+#include "FastLED.h"
 
-#include <Adafruit_NeoPixel.h>
-#define PIN 13
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(24, PIN, NEO_GRB + NEO_KHZ800);
+SoftwareSerial BT(24, 16);
 
-// Timer Lib
-#include <Timer.h>
-
-// Swipe Detector Lib
-#include "SwipeDetector.h"
-#include "ProximitySensor.h"
+Timer disableSwipeTimer(120);
 
 // Sharp IR Setup
-SharpIRProximitySensor sensorLeft(2);
-SharpIRProximitySensor sensorRight(3);
+SharpIRProximitySensor sensorLeft(A1);
+SharpIRProximitySensor sensorRight(A0);
 SwipeDetector detector;
 
-Timer disableSwipeTimer(100);
+// Low Bat Detection Setup
+// const uint8_t LED_PIN = 13;
+const uint8_t BAT_PIN = 4;
 
-void consumerCommand(uint8_t mask0,uint8_t mask1);
-void colorWipe(uint32_t c, uint8_t wait);
-void reverseColorWipe(uint32_t c, uint8_t wait);
-void theaterChase(uint32_t c, uint8_t wait);
+bool pauseOn = false;
+
+void doVolumeUp();
+void doVolumeUpMore();
+void doVolumeDown();
+void doVolumeDownMore();
+void doPause();
+
+void consumerCommand(uint8_t mask0, uint8_t mask1);
 
 void setup()
 {
-    strip.begin();
-    strip.show(); // Initialize all pixels to 'off'
-
     Serial.begin(9600);
     BT.begin(9600);
+
+    NeoPixel::setup();
+
+    pinMode(4, INPUT);
+    pinMode(7, OUTPUT);
+    pinMode(13, OUTPUT);
 }
 
 
-void detectSwipe(int distance2, int distance)
+void detectSwipe(int distance, int distance2)
 {
     SwipeDetector::Swipe s = detector.detect(distance, distance2);
 
-    if (s == SwipeDetector::SWIPE_RIGHT) {
+    if (s == SwipeDetector::SWIPE_RIGHT && !pauseOn)
+    {
+        Serial.println("Next Track");
+        consumerCommand(0x80, 0x00);
+        consumerCommand(0x00, 0x00);
 
-       // Serial.println("Next Track");
-       // consumerCommand(0x80,0x00);
-       // consumerCommand(0x00,0x00);
-        
-        Serial.println("Scan Next Track");
-        consumerCommand(0x00,0x02);
-        consumerCommand(0x00,0x00);
-        
-        // Serial.println("Right Arrow");
-        // BT.write(7);
+        NeoPixel::colorWipe(50, 50, 50, 15);
+        NeoPixel::colorWipe(0, 0, 0, 10);
+    }
+    else if (s == SwipeDetector::SWIPE_RIGHT && pauseOn)
+    {
+        Serial.println("Play/Pause");
+        consumerCommand(0x40, 0x00);
+        consumerCommand(0x00, 0x00);
 
-        colorWipe(strip.Color(25, 50, 0), 20);
-        colorWipe(strip.Color(0, 0, 0), 20);
+        NeoPixel::colorWipe(40, 0, 80, 15);
+        NeoPixel::colorWipe(0, 0, 0, 10);
+
+        pauseOn = false;
     }
 
-    if (s == SwipeDetector::SWIPE_LEFT) {
+    if (s == SwipeDetector::SWIPE_LEFT && !pauseOn)
+    {
+        Serial.println("Previous Track");
+        consumerCommand(0x00, 0x01);
+        consumerCommand(0x00, 0x00);
 
-        // Serial.println("Previous Track");
-        // consumerCommand(0x00,0x01);
-        // consumerCommand(0x00,0x00);
-        
-        Serial.println("Scan Prevoius Track");
-        consumerCommand(0x00,0x04);
-        consumerCommand(0x00,0x00); 
-     
-        // Serial.println("Left Arrow");
-        // BT.write(11);    
+        NeoPixel::reverseColorWipe(50, 50, 50, 15);
+        NeoPixel::reverseColorWipe(0, 0, 0, 10);
 
-        reverseColorWipe(strip.Color(50, 0, 1), 20);
-        reverseColorWipe(strip.Color(0, 0, 0), 20);
+
+    } else if (SwipeDetector::SWIPE_LEFT == s && pauseOn)
+    {
+        Serial.println("Play/Pause");
+        consumerCommand(0x40, 0x00);
+        consumerCommand(0x00, 0x00);
+
+        NeoPixel::reverseColorWipe(40, 0, 80, 15);
+        NeoPixel::reverseColorWipe(0, 0, 0, 10);
+
+        pauseOn = false;
     }
 }
 
 
-void detectHover(int start, int dist) 
+void detectHover(int start, int dist)
 {
-    int diff = start-dist;
-    //Serial.println(dist);
+    int diff = start - dist;
 
-    if (diff < -1) {
+    const bool hover_up = diff > -7 && diff < -1;
+    const bool hover_up_more = diff <= -8;
+    const bool nullpunkt_indikator = dist >= 5 && diff == 0;
+    const bool hover_down = diff > 1 && diff <= 7;
+    const bool hover_down_more = diff >= 8;
+    const bool hold_bottom = dist <= 3 && diff == 0 && !pauseOn;
+    const bool hold_bottom_again = dist <= 3 && diff == 0 && pauseOn;
 
-        //Serial.println("Volume Up");
-        consumerCommand(0x10,0x00);
-        consumerCommand(0x00,0x00);
-        
-        //BT.write(14);
-        //Serial.println("Up Arrow");
+    if(hold_bottom_again)
+        doPlay();
 
-        theaterChase(strip.Color(25, 50, 10), 2);
-        theaterChase(strip.Color(0, 0, 0), 0);
+    if (pauseOn)
+        return;
+    
+    if (hover_up)
+        doVolumeUp();
 
-        sensorLeft.clear();
-        sensorRight.clear();
-    }
+    if (hover_up_more)
+        doVolumeUpMore();
 
-    if (diff > 2) {
+    if (hover_down)
+        doVolumeDown();
 
-        //Serial.println("Volume Down");
-        consumerCommand(0x20,0x00);
-        consumerCommand(0x00,0x00);
+    if (hover_down_more)
+        doVolumeDownMore();
+    
+    if (hold_bottom)
+        doPause();
 
-        //Serial.println("Down Arrow");
-        //BT.write(12);
-        
-        theaterChase(strip.Color(40, 10, 5), 1);
-        theaterChase(strip.Color(0, 0, 0), 0);
-
-        sensorLeft.clear();
-        sensorRight.clear();
-    }
+//    if (nullpunkt_indikator)
+//        NeoPixel::theaterchase(20, 20, 20, 20);
 }
 
-const int MAX = 30;
-const int MIN = 4;
-
-void detectHover1(int start, int dist)
+void doVolumeDownMore()
 {
-    int diff = start-dist;
+    consumerCommand(0x20, 0x00);
+    consumerCommand(0x00, 0x00);
 
-    //Serial.println(dist);
+    NeoPixel::reverseMovingPixel(230, 200, 200, 5);
 
-    if (diff < -1) {
-
-        // Volume Up
-        consumerCommand(0x10,0x00);
-        consumerCommand(0x00,0x00);
-        //Serial.println("Volume Up");
-
-        //theaterChase(strip.Color(25, 50, 0), 20);
-        //theaterChase(strip.Color(0, 0, 100), 20);
-
-        sensorLeft.clear();
-        sensorRight.clear();
-
-        int range = MAX-start;
-        float f = 1.0f+(float)diff/range;
-        int d = f*250;
-        if(d<0)
-            d=1;
-        Serial.println(d);
-        delay(d);
-    }
-
-    if (diff > 2) {
-
-        // Volume Down
-        consumerCommand(0x20,0x00);
-        consumerCommand(0x00,0x00);
-        //Serial.println("Volume Down");
-
-        //theaterChase(strip.Color(50, 0, 1), 20);
-        //theaterChase(strip.Color(0, 0, 100), 20);
-
-        int range = start-MIN;
-        float f = 1.0f-(float)diff/range;
-
-        int d = f*250;
-        if(d<0)
-            d=1;
-        Serial.println(d);
-        delay(d);
-
-        sensorLeft.clear();
-        sensorRight.clear();
-    }
+    sensorLeft.clear();
+    sensorRight.clear();
 }
 
-
-void detectHover2(int start, int dist)
+void doVolumeDown()
 {
-    int diff = last-dist;
+    consumerCommand(0x20, 0x00);
+    consumerCommand(0x00, 0x00);
 
-    if(diff != 0)
-    Serial.println(diff);
+    NeoPixel::reverseMovingPixel(200, 200, 200, 10);
 
-    if (diff < -2) {
-
-        // Volume Up
-        consumerCommand(0x10,0x00);
-        consumerCommand(0x00,0x00);
-        //Serial.println("Volume Up");
-
-        theaterChase(strip.Color(25, 50, 0), 0);
-        theaterChase(strip.Color(0, 0, 0), 0);
-
-        sensorLeft.clear();
-        sensorRight.clear();
-    }
-
-    if (diff > 2) {
-
-        // Volume Down
-        consumerCommand(0x20,0x00);
-        consumerCommand(0x00,0x00);
-        //Serial.println("Volume Down");
-
-        theaterChase(strip.Color(50, 0, 1), 0);
-        theaterChase(strip.Color(0, 0, 0), 0);
-    }
-
-    delay(100);
-
-    last = dist;
+    sensorLeft.clear();
+    sensorRight.clear();
 }
 
-int last;
-int hoverStart;
+void doVolumeUpMore()
+{
+    consumerCommand(0x10, 0x00);
+    consumerCommand(0x00, 0x00);
+
+    NeoPixel::movingPixel(200, 200, 200, 5);
+
+    sensorLeft.clear();
+    sensorRight.clear();
+}
+
+void doVolumeUp()
+{
+    consumerCommand(0x10, 0x00);
+    consumerCommand(0x00, 0x00);
+
+    NeoPixel::movingPixel(200, 200, 200, 10);
+        
+    sensorLeft.clear();
+    sensorRight.clear();
+}
+
+void doPause()
+{
+    Serial.println("Pause");
+    consumerCommand(0x40, 0x00);
+    consumerCommand(0x00, 0x00);
+
+    NeoPixel::fade(100, 100, 100, 2);
+
+    pauseOn = true;
+
+    sensorLeft.clear();
+    sensorRight.clear();
+}
+
+void doPlay()
+{
+    Serial.println("Play");
+    consumerCommand(0x40, 0x00);
+    consumerCommand(0x00, 0x00);
+    
+    NeoPixel::fade(100, 100, 100, 2);
+
+    pauseOn = false;
+    
+    sensorLeft.clear();
+    sensorRight.clear();
+}
 
 void loop()
 {
+    static int hover_start;
+
     int distance = sensorLeft.read();
     int distance2 = sensorRight.read();
     int avgDist = (distance + distance2) / 2;
 
-    if (distance != -1 && distance2 != -1) {
-        //Serial.println(distance);
-        //Serial.println(distance2);
-    } else {
+    if (distance != -1 && distance2 != -1)
+    {
+        Serial.print(distance);
+        Serial.print("   ");
+        Serial.print(distance2);
+        Serial.print("   ");
+        Serial.println(avgDist);
+    } else
+    {
         disableSwipeTimer.reset();
     }
 
-    if(disableSwipeTimer.singleShot()) {
-        hoverStart = avgDist;
-        last = hoverStart;
+    if (disableSwipeTimer.singleShot())
+    {
+        hover_start = avgDist;
         Serial.print("Hover Start: ");
-        Serial.println(hoverStart);
+        Serial.println(hover_start);
     }
 
-    if(disableSwipeTimer.check()) {
-        detectHover(hoverStart, avgDist);
+    if (disableSwipeTimer.check())
+    {
+        detectHover(hover_start, avgDist);
         detector.reset();
-    } else {
-        detectSwipe(distance2, distance);
+    } else
+    {
+        detectSwipe(distance, distance2);
+    }
 
+
+    if (digitalRead(BAT_PIN) == 0)
+    {
+        NeoPixel::fade(80, 0, 0, 10);
     }
 }
 
 
-void consumerCommand(uint8_t mask0,uint8_t mask1) 
+void consumerCommand(uint8_t mask0, uint8_t mask1)
 {
     BT.write(0xFD);
-    BT.write((byte)0x00);
-    BT.write((byte)0x02);
+    BT.write((byte) 0x00);
+    BT.write((byte) 0x02);
     BT.write(mask0);
     BT.write(mask1);
-    BT.write((byte)0x00);
-    BT.write((byte)0x00);
-    BT.write((byte)0x00);
-    BT.write((byte)0x00);
+    BT.write((byte) 0x00);
+    BT.write((byte) 0x00);
+    BT.write((byte) 0x00);
+    BT.write((byte) 0x00);
 }
-
-
-void colorWipe(uint32_t c, uint8_t wait) 
-{
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, c);
-        strip.show();
-        delay(wait);
-    }
-}
-
-void reverseColorWipe(uint32_t c, uint8_t wait)
-{
-    for(int16_t i=(strip.numPixels()-1); i>=0; i--)
-    {
-        strip.setPixelColor(i, c);
-        strip.show();
-        delay(wait);
-    }
-}
-
-//void colorFade(uint8_t wait) {
-//  for (uint16_t i=255; i>0; i--) {
-//      strip.setPixelColor(0, strip.Color(i,i,i));
-//      strip.show();
-//      delay(wait);
-//  }
-//}
-
-
-void theaterChase(uint32_t c, uint8_t wait) {
-    for (int j=0; j<10; j++) {  //do 10 cycles of chasing
-        for (int q=0; q < 3; q++) {
-            for (int i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, c);    //turn every third pixel on
-            }
-            strip.show();
-
-            delay(wait);
-
-            for (int i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, 0);        //turn every third pixel off
-            }
-        }
-    }
-}
-
