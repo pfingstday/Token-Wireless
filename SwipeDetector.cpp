@@ -1,4 +1,4 @@
-#include "Token_SwipeDetector.h"
+#include "SwipeDetector.h"
 #include <Arduino.h>
 
 

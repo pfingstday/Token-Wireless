@@ -1,4 +1,4 @@
-#include "Token_NeoPixel.h"
+#include "NeoPixel.h"
 #include "FastLED.h"
 
 namespace NeoPixel
@@ -10,6 +10,27 @@ namespace NeoPixel
         FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
     }
 
+    void setPixel(int i, uint8_t r, uint8_t g, uint8_t b)
+    {
+        leds[i] = CRGB(r, g, b);
+    }
+
+    void show()
+    {
+        FastLED.show();
+    }
+
+    void midiIndicator(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
+    {
+        int val = analogRead(A3);
+        int numLedsToLight = map(val, 20, 950, 0, 24);
+        FastLED.clear();
+        for (int led = 0; led < numLedsToLight; led++) {
+            leds[led] = CRGB(40, 0, 80);
+        }
+        FastLED.show();
+    }
+
     void colorWipe(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
     {
         for (int i = 0; i < NUM_LEDS; i++)
@@ -18,6 +39,41 @@ namespace NeoPixel
             FastLED.show();
             delay(wait);
         }
+    }
+
+    void colorWipe6(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
+    {
+        for (int i = 5; i < NUM_LEDS; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+
+        for (int i = 0; i < 7; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+    }
+
+    void colorWipe12(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
+    {
+        for (int i = 11; i < NUM_LEDS; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+
+        for (int i = 0; i < 13; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+
     }
 
     void reverseColorWipe(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
@@ -52,7 +108,7 @@ namespace NeoPixel
             delay(wait);
         }
         FastLED.show();
-    }   
+    }
 
     void theaterchase(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
     {
@@ -114,7 +170,7 @@ namespace NeoPixel
             delay(wait);
         }
     }
-    
+
     void firstLight(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
     {
         for (int i = 0; i < NUM_LEDS; i++)
@@ -125,6 +181,5 @@ namespace NeoPixel
             leds[i] = CRGB::Black;
         }
         FastLED.show();
-    } 
+    }
 }
-
