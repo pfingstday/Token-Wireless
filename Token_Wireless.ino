@@ -8,34 +8,43 @@
 #include "FastLED.h"
 #include "Accelerometer.h"
 
-
 SoftwareSerial BT(33, 11);
-Accelerometer<10> accelerometer;
 
-Timer disableSwipeTimer(120);
+Accelerometer<10> accelerometer;
 
 // Sharp IR Setup
 SharpIRProximitySensor sensorLeft(A3);
 SharpIRProximitySensor sensorRight(A8);
 SwipeDetector detector;
 
+Timer disableSwipeTimer(120);
+
 // Low Bat Detection Setup
 const uint8_t BAT_PIN = 4;
 
 boolean modeSwitch = false;
-byte mode = 3;
+byte mode = 1;
 
-// mode 1
+// 1 MUSIC MODE
 bool pauseOn = false;
 
-//mode 3
-const int sensor = A3;
+// 3 MIDI MODE
+const int channel = 1;
 
-byte current;
-byte previous;
+const int controller_x = 10; // 10 = pan position
+const int controller_y = 91; // 91 = reverb level
+const int controller_ir = 11; // 11 = volume/expression
 
-byte current2;
-byte previous2;
+const int sensor_ir = A3;
+
+byte current_x;
+byte previous_x;
+
+byte current_y;
+byte previous_y;
+
+byte current_ir;
+byte previous_ir;
 
 
 void doVolumeUp();
@@ -68,22 +77,21 @@ void setup()
 }
 
 
-void detectSwipe(int distance, int distance2)
-{
+void detectSwipe(int distance, int distance2) {
     SwipeDetector::Swipe s = detector.detect(distance, distance2);
 
     if (mode == 1) {
 
         if (s == SwipeDetector::SWIPE_RIGHT && !pauseOn) {
 
-            Serial.println("Next Track");
-            consumerCommand(0x80, 0x00);
+            Serial.println("Scan Next Track");
+            consumerCommand(0x00,0x02);
             consumerCommand(0x00, 0x00);
 
             NeoPixel::colorWipe(50, 50, 50, 15);
             NeoPixel::colorWipe(0, 0, 0, 10);
-        }
-        else if (s == SwipeDetector::SWIPE_RIGHT && pauseOn) {
+
+        } else if (s == SwipeDetector::SWIPE_RIGHT && pauseOn) {
             Serial.println("Play/Pause");
             consumerCommand(0x40, 0x00);
             consumerCommand(0x00, 0x00);
@@ -95,13 +103,12 @@ void detectSwipe(int distance, int distance2)
         }
 
         if (s == SwipeDetector::SWIPE_LEFT && !pauseOn) {
-            Serial.println("Previous Track");
-            consumerCommand(0x00, 0x01);
+            Serial.println("Scan Previous Track");
+            consumerCommand(0x00,0x04);
             consumerCommand(0x00, 0x00);
 
             NeoPixel::reverseColorWipe(50, 50, 50, 15);
             NeoPixel::reverseColorWipe(0, 0, 0, 10);
-
 
         } else if (SwipeDetector::SWIPE_LEFT == s && pauseOn) {
             Serial.println("Play/Pause");
@@ -116,10 +123,10 @@ void detectSwipe(int distance, int distance2)
     }
 
 
-    if(mode == 2) {
+    if (mode == 2) {
 
 
-        if (s == SwipeDetector::SWIPE_RIGHT && mode == 2) {
+        if (s == SwipeDetector::SWIPE_RIGHT) {
 
             Serial.println("Arrow Right");
             BT.write(7);
@@ -128,14 +135,54 @@ void detectSwipe(int distance, int distance2)
             NeoPixel::colorWipe(0, 0, 0, 10);
         }
 
-
-        if (s == SwipeDetector::SWIPE_LEFT && mode == 2) {
+        if (s == SwipeDetector::SWIPE_LEFT) {
             Serial.println("Arrow Left");
             BT.write(11);
 
             NeoPixel::reverseColorWipe(10, 50, 20, 5);
             NeoPixel::reverseColorWipe(0, 0, 0, 10);
 
+        }
+    }
+
+    if (mode == 4) {
+
+
+        if (s == SwipeDetector::SWIPE_RIGHT) {
+
+            NeoPixel::colorWipe(100, 0, 0, 10);
+            NeoPixel::colorWipe(0, 0, 0, 10);
+
+        }
+
+        if (s == SwipeDetector::SWIPE_LEFT) {
+            NeoPixel::reverseColorWipe(100, 0, 0, 10);
+            NeoPixel::reverseColorWipe(0, 0, 0, 10);
+
+        }
+    }
+    
+        if (modeSwitch) {
+
+
+        if (s == SwipeDetector::SWIPE_RIGHT) {
+
+            NeoPixel::colorWipe18(40, 0, 80, 50);
+            mode = 3;
+            modeSwitch = false;
+            
+            FastLED.clear();
+            FastLED.show();
+
+        }
+
+        if (s == SwipeDetector::SWIPE_LEFT) {
+            NeoPixel::colorWipe6(50, 50, 50, 50);
+            mode = 1;
+            modeSwitch = false;
+            
+            FastLED.clear();
+            FastLED.show();
         }
     }
 }
@@ -147,48 +194,50 @@ void detectHover(int start, int dist)
 
     if (mode == 1) {
 
-    const bool hover_up = diff > -7 && diff < -1;
-    const bool hover_up_more = diff <= -8;
-    const bool nullpunkt_indikator = dist >= 5 && diff == 0;
-    const bool hover_down = diff > 1 && diff <= 7;
-    const bool hover_down_more = diff >= 8;
-    const bool hold_bottom = dist <= 3 && diff == 0 && !pauseOn;
-    const bool hold_bottom_again = dist <= 3 && diff == 0 && pauseOn;
+        const bool hover_up = diff > -7 && diff < -1;
+        const bool hover_up_more = diff <= -8;
+        const bool nullpunkt_indikator = dist >= 5 && diff == 0;
+        const bool hover_down = diff > 1 && diff <= 7;
+        const bool hover_down_more = diff >= 8;
+        const bool hold_bottom = dist <= 3 && diff == 0 && !pauseOn;
+        const bool hold_bottom_again = dist <= 3 && diff == 0 && pauseOn;
 
-    if(hold_bottom_again)
-        doPlay();
+        if(hold_bottom_again)
+            doPlay();
 
-    if (pauseOn)
-        return;
+        if (pauseOn)
+            return;
 
-    if (hover_up)
-        doVolumeUp();
+        if (hover_up)
+            doVolumeUp();
 
-    if (hover_up_more)
-        doVolumeUpMore();
+        if (hover_up_more)
+            doVolumeUpMore();
 
-    if (hover_down)
-        doVolumeDown();
+        if (hover_down)
+            doVolumeDown();
 
-    if (hover_down_more)
-        doVolumeDownMore();
+        if (hover_down_more)
+            doVolumeDownMore();
 
-    if (hold_bottom)
-        doPause();
+        if (hold_bottom)
+            doPause();
+    }
 
-//    if (nullpunkt_indikator)
-//        NeoPixel::theaterchase(20, 20, 20, 20);
-}
     if (mode == 2) {
 
         const bool hover_up = diff > -7 && diff < -1;
         const bool hover_down = diff > 1 && diff <= 7;
+        const bool hold_bottom = dist <= 3 && diff == 0;
 
         if (hover_up)
             doArrowUp();
 
         if (hover_down)
             doArrowDown();
+
+        if (hold_bottom)
+            doSpace();
     }
 }
 
@@ -238,7 +287,6 @@ void doVolumeUp()
 
 void doPause()
 {
-    Serial.println("Pause");
     consumerCommand(0x40, 0x00);
     consumerCommand(0x00, 0x00);
 
@@ -252,7 +300,6 @@ void doPause()
 
 void doPlay()
 {
-    Serial.println("Play");
     consumerCommand(0x40, 0x00);
     consumerCommand(0x00, 0x00);
 
@@ -268,7 +315,7 @@ void doArrowUp() {
 
     BT.write(14);
 
-    NeoPixel::movingPixel(20, 100, 40, 10);
+    NeoPixel::movingPixel(10, 50, 20, 15);
 
     sensorLeft.clear();
     sensorRight.clear();
@@ -278,7 +325,7 @@ void doArrowDown() {
 
     BT.write(12);
 
-    NeoPixel::reverseMovingPixel(100, 40, 20, 10);
+    NeoPixel::reverseMovingPixel(10, 50, 20, 15);
 
     sensorLeft.clear();
     sensorRight.clear();
@@ -288,7 +335,7 @@ void doSpace() {
 
     BT.write(0x20);
 
-    NeoPixel::reverseMovingPixel(100, 0, 0, 10);
+    NeoPixel::theaterchase(10, 50, 20, 10);
 
     sensorLeft.clear();
     sensorRight.clear();
@@ -296,6 +343,7 @@ void doSpace() {
 
 void loop()
 {
+    // Hover
     static int hover_start;
 
     int distance = sensorLeft.read();
@@ -330,8 +378,20 @@ void loop()
         detectSwipe(distance, distance2);
     }
 
+
     // Accelerometer
     byte acc = accelerometer.update();
+
+    if(acc & Acc::ACTIVITY)
+    {
+        Serial.println("### Activity");
+    }
+
+    if(acc & Acc::INACTIVITY)
+    {
+        Serial.println("### Inactivity");
+        modeSwitch = false;
+    }
 
     if(acc & Acc::DOUBLE_TAP && !modeSwitch)
     {
@@ -359,21 +419,21 @@ void loop()
 
     if (modeSwitch) {
 
-        NeoPixel::setPixel(23, 50, 50, 50);
-        NeoPixel::setPixel(1, 50, 50, 50);
-        NeoPixel::setPixel(5, 10, 50, 20);
-        NeoPixel::setPixel(7, 10, 50, 20);
-        NeoPixel::setPixel(11, 40, 0, 80);
-        NeoPixel::setPixel(13, 40, 0, 80);
-        NeoPixel::setPixel(17, 0, 0, 0);
-        NeoPixel::setPixel(19, 0, 0, 0);
+        NeoPixel::setPixel(5, 50, 50, 50);
+        NeoPixel::setPixel(7, 50, 50, 50);
+        NeoPixel::setPixel(11, 10, 50, 20);
+        NeoPixel::setPixel(13, 10, 50, 20);
+        NeoPixel::setPixel(17, 40, 0, 80);
+        NeoPixel::setPixel(19, 40, 0, 80);
+        NeoPixel::setPixel(1, 0, 0, 0);
+        NeoPixel::setPixel(23, 0, 0, 0);
 
         FastLED.show();
 
-        const bool tilt_left = x < -100;
-        const bool tilt_forward = y > 100;
-        const bool tilt_right = x > 100;
-        const bool tilt_backward = y < -100;
+        const bool tilt_left = x > 60;
+        const bool tilt_forward = y < -60;
+        const bool tilt_right = x < -60;
+        const bool tilt_backward = y > 60;
 
         if (tilt_left) {
             Serial.println("Mode 1: Music Mode");
@@ -383,7 +443,7 @@ void loop()
             FastLED.clear();
             FastLED.show();
 
-            NeoPixel::colorWipe(50, 50, 50, 50);
+            NeoPixel::colorWipe6(50, 50, 50, 50);
 
             FastLED.clear();
             FastLED.show();
@@ -397,7 +457,7 @@ void loop()
             FastLED.clear();
             FastLED.show();
 
-            NeoPixel::colorWipe6(10, 50, 20, 50);
+            NeoPixel::colorWipe12(10, 50, 20, 50);
 
             FastLED.clear();
             FastLED.show();
@@ -411,7 +471,7 @@ void loop()
             FastLED.clear();
             FastLED.show();
 
-            NeoPixel::colorWipe12(40, 0, 80, 50);
+            NeoPixel::colorWipe18(40, 0, 80, 50);
 
             FastLED.clear();
             FastLED.show();
@@ -430,10 +490,10 @@ void loop()
 
     if (mode == 1 && !modeSwitch) {
 
-        const bool tilt_left = x < -100;
-        const bool tilt_forward = y > 100;
-        const bool tilt_right = x > 100;
-        const bool tilt_backward = y < -100;
+        const bool tilt_left = x > 100;
+        const bool tilt_forward = y < -100;
+        const bool tilt_right = x < -100;
+        const bool tilt_backward = y > 100;
 
         if (tilt_left) {
             //Serial.println("Previous Track");
@@ -465,59 +525,56 @@ void loop()
     }
 
     if (mode == 3 && !modeSwitch) {
-        int val = analogRead(A3);
-        int midimap = map(val, 0, 960, 0, 127);
 
         NeoPixel::midiIndicator(40, 0, 80, 0);
 
-        current = midimap;
-        if (current != previous) {
-            previous = current;
-            usbMIDI.sendControlChange(11, current, 1);
+        int val_ir = analogRead(sensor_ir);
+        int midimap_ir = map(val_ir, 0, 960, 0, 127);
+
+        current_ir = midimap_ir;
+        if (current_ir != previous_ir) {
+            previous_ir = current_ir;
+            usbMIDI.sendControlChange(controller_ir, current_ir, channel);
             //delay(5);
         }
-
 
         int midimap_x = map(x, -127, 127, 0, 127);
 
-        current2 = midimap_x;
-        if (current2 != previous2) {
-            previous2 = current2;
-            usbMIDI.sendControlChange(10, current2, 1);
+        current_x = midimap_x;
+        if (current_x != previous_x) {
+            previous_x = current_x;
+            usbMIDI.sendControlChange(controller_x, current_x, channel);
             //delay(5);
         }
 
-//        int midimap_y = map(y, -255, 270, 0, 127);
-//        usbMIDI.sendControlChange(1, midimap_y, 1);
-//
-//        int midimap_z = map(z, -255, 270, 0, 127);
-//        usbMIDI.sendControlChange(3, midimap_z, 3);
+        int midimap_y = map(y, -127, 127, 0, 127);
+
+        current_y = midimap_y;
+        if (current_y != previous_y) {
+            previous_y = current_y;
+            usbMIDI.sendControlChange(controller_y, current_y, channel);
+            //delay(5);
+        }
+
     }
-
-
 
     if(!modeSwitch) {
 
-        if (x < -100)
-        {
-            NeoPixel::setPixel(0, 0, 0, 100);
-            FastLED.show();
-            delay(10);
-            FastLED.clear();
-            FastLED.show();
-        }
+        const bool tilt_left = x > 100;
+        const bool tilt_forward = y < -100;
+        const bool tilt_right = x < -100;
+        const bool tilt_backward = y > 100;
 
-        if (y > 100)
-        {
+        if (tilt_left) {
             NeoPixel::setPixel(6, 0, 0, 100);
             FastLED.show();
             delay(10);
             FastLED.clear();
             FastLED.show();
+
         }
 
-        if (x > 100)
-        {
+        if (tilt_forward) {
             NeoPixel::setPixel(12, 0, 0, 100);
             FastLED.show();
             delay(10);
@@ -525,19 +582,28 @@ void loop()
             FastLED.show();
         }
 
-        if (y < -100)
-        {
+        if (tilt_right) {
             NeoPixel::setPixel(18, 0, 0, 100);
             FastLED.show();
             delay(10);
             FastLED.clear();
             FastLED.show();
+
         }
+
+        if (tilt_backward) {
+            NeoPixel::setPixel(0, 0, 0, 100);
+            FastLED.show();
+            delay(10);
+            FastLED.clear();
+            FastLED.show();
+
+        }
+
     }
-
-
+    
     // BT Ent-Pair
-    if (z < -120)
+    if (z < -100)
     {
         digitalWrite(8, HIGH);
         digitalWrite(13, HIGH);

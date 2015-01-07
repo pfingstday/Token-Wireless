@@ -3,6 +3,7 @@
 
 namespace NeoPixel
 {
+    uint8_t offset = 0;
     CRGB leds[NUM_LEDS];
 
     void setup()
@@ -68,6 +69,24 @@ namespace NeoPixel
         }
 
         for (int i = 0; i < 13; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+
+    }
+    
+      void colorWipe18(uint8_t r, uint8_t g, uint8_t b, uint8_t wait)
+    {
+        for (int i = 17; i < NUM_LEDS; i++)
+        {
+            leds[i] = CRGB(r, g, b);
+            FastLED.show();
+            delay(wait);
+        }
+
+        for (int i = 0; i < 18; i++)
         {
             leds[i] = CRGB(r, g, b);
             FastLED.show();
@@ -182,4 +201,20 @@ namespace NeoPixel
         }
         FastLED.show();
     }
+
+    void spinnyWheels(uint8_t wait)
+    {
+       
+    for(int i=0; i<24; i++) {
+      uint32_t c = CRGB(0, 0, 0);
+      if(((offset + i) & 7) < 4) c = 0x00ff96;
+      leds[i] = c;
+    }
+    FastLED.show();
+    offset++;
+    delay(wait);
+    
+    FastLED.clear();
+    FastLED.show();      
+    }        
 }

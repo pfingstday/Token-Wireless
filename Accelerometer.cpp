@@ -45,12 +45,12 @@ void Accelerometer<interrupt_pin>::setup()
 
     // offset
     writeTo(R_OFSX, -3);
-    writeTo(R_OFSY, 0);
+    writeTo(R_OFSY, -3);
     writeTo(R_OFSZ, 0);
 
     // interrupts setup
     writeTo(R_INT_MAP, 0); // send all interrupts to ADXL345's INT1 pin
-    writeTo(R_INT_ENABLE, B8(1111100)); // enable signle and double tap, activity, inactivity and free fall detection
+    writeTo(R_INT_ENABLE, B8(1111000)); // enable signle and double tap, activity, inactivity
 
     // single tap configuration
     writeTo(R_DUR, 0x1F); // 625us/LSB
@@ -76,37 +76,7 @@ void Accelerometer<interrupt_pin>::setup()
     // set the ADXL345 in measurement and sleep Mode: this will save power while while we will still be able to detect activity
     // set the Link bit to 1 so that the activity and inactivity functions aren't concurrent but alternatively activated
     // set the AUTO_SLEEP bit to 1 so that the device automatically goes to sleep when it detects inactivity
-    writeTo(R_POWER_CTL, B8(111100));
-}
-
-template < uint8_t interrupt_pin >
-byte Accelerometer<interrupt_pin>::readByte(byte address)
-{
-    Wire.beginTransmission(DEVICE_ID); //start transmission to device
-    Wire.send(address);        //sends address to read from
-    Wire.endTransmission(); //end transmission
-
-    Wire.beginTransmission(DEVICE_ID); //start transmission to device
-    Wire.requestFrom(DEVICE_ID, (byte)1);    // request 1 byte from device
-
-    byte readed = 0;
-    if(Wire.available())
-    {
-        readed = Wire.receive(); // receive a byte
-    }
-    Wire.endTransmission(); //end transmission
-    return readed;
-}
-
-template < uint8_t interrupt_pin >
-void Accelerometer<interrupt_pin>::readAxis(int16_t &x, int16_t &y, int16_t &z)
-{
-    byte buff[6];
-    readFrom(0x32, sizeof(buff), buff); //read the acceleration data from the ADXL345
-
-    x = (((int)buff[1]) << 8) | buff[0];
-    y = (((int)buff[3]) << 8) | buff[2];
-    z = (((int)buff[5]) << 8) | buff[4];
+    writeTo(R_POWER_CTL, B8(101100)); // enable AutoSleep = 111100
 }
 
 template < uint8_t interrupt_pin >
@@ -140,6 +110,36 @@ byte Accelerometer<interrupt_pin>::update()
     }
 
     return interruptSource;
+}
+
+template < uint8_t interrupt_pin >
+void Accelerometer<interrupt_pin>::readAxis(int16_t &x, int16_t &y, int16_t &z)
+{
+    byte buff[6];
+    readFrom(0x32, sizeof(buff), buff); //read the acceleration data from the ADXL345
+
+    x = (((int)buff[1]) << 8) | buff[0];
+    y = (((int)buff[3]) << 8) | buff[2];
+    z = (((int)buff[5]) << 8) | buff[4];
+}
+
+template < uint8_t interrupt_pin >
+byte Accelerometer<interrupt_pin>::readByte(byte address)
+{
+    Wire.beginTransmission(DEVICE_ID); //start transmission to device
+    Wire.send(address);        //sends address to read from
+    Wire.endTransmission(); //end transmission
+
+    Wire.beginTransmission(DEVICE_ID); //start transmission to device
+    Wire.requestFrom(DEVICE_ID, (byte)1);    // request 1 byte from device
+
+    byte readed = 0;
+    if(Wire.available())
+    {
+        readed = Wire.receive(); // receive a byte
+    }
+    Wire.endTransmission(); //end transmission
+    return readed;
 }
 
 template < uint8_t interrupt_pin >
